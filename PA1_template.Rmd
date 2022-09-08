@@ -4,22 +4,163 @@ output:
   html_document:
     keep_md: true
 ---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
 
 
 ## Loading and preprocessing the data
+```{r load, include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+url<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(url, destfile = "repdata_data_activity.zip")
+unzip("repdata_data_activity.zip",exdir=".")
+```
 
+The variables included in this dataset are:
+1. Number of steps taking in a 5-minute interval (missing values are coded as NA)
+2. The date on which the measurement was taken in YYYY-MM-DD format
+3. Identifier for the 5-minute interval in which measurement was taken
 
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+
+```{r, read}
+activity <- read.csv("activity.csv")
+activity$date<-as.Date(as.character(activity$date),format="%Y-%m-%d")
+str(activity)
+```
+
+Here is the summary of activity data set.
+
+```{r,summary}
+summary(activity)
+```
 
 ## What is mean total number of steps taken per day?
 
+Here we calculate the total number of steps taken per day and store the data in
+dataframe tot_steps_eachday.
 
+```{r,stepseachday}
+tot_steps_eachday<-activity%>%
+  group_by(date) %>%
+  summarise(tot_step=sum(steps,na.rm=TRUE))
+
+```
+
+In the histogram plot of the total number of steps taken each day shows highest 
+frequency at 0 steps.
+  
+```{r,hist}
+ggplot(tot_steps_eachday, aes(tot_step)) +
+  geom_histogram(fill = "red", binwidth = 1200) +
+  labs(title = "Histogram of Total Steps Per Day", x = "Total Steps per day", y = "Frequency")
+```
+
+Mean is smaller than median of the total number of steps taken per day.
+
+```{r,mean}
+mean(tot_steps_eachday$tot_step,na.rm=TRUE)
+median(tot_steps_eachday$tot_step,na.rm=TRUE)
+
+```
 
 ## What is the average daily activity pattern?
 
+To make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis) we calculate
+average number of steps and store in a data frame avg_steps.
 
+```{r,avg}
+avg_steps<-activity%>%
+  group_by(interval) %>%
+  summarize(avg_step=mean(steps,na.rm=TRUE))
+
+```
+
+Here we show time series plot of average steps in 5 minute interval.
+
+```{r,avgplot}
+plot(avg_steps,type="l",col="green",xlab="5 min Interval",ylab="Average Steps",main="Time Series Plot of Average Steps in 5 minute Interval")
+```
+
+To show which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps we use which.max function.
+ 
+```{r,avgstep}
+avg_steps[which.max(avg_steps$avg_step),]
+
+```
 
 ## Imputing missing values
 
+Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+We calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+
+```{r,number}
+sum(is.na(activity$steps))
+```
+
+For filling in all of the missing values in the dataset we use the mean steps for that 5-minute interval. 
+```{r, include=FALSE}
+library(Hmisc)
+```
+
+We create a new dataset named activity_impute that is equal to the original dataset but with the missing data filled in.
+
+```{r,impute}
+activity_impute<-data.frame(impute(activity$steps, mean),activity$date,activity$interval)
+names(activity_impute)<-c("steps","date","interval")
+activity_impute$steps<-as.numeric(activity_impute$steps)
+str(activity_impute)
+```
+
+Using imputed data set we calculated total number of steps taken par day. 
+
+```{r,imputestep}
+tot_steps_eachday_impute<-activity_impute%>%
+  group_by(date) %>%
+  summarise(tot_step=sum(steps))
+```
+
+ We create a histogram plot of the total number of steps taken each day and
+ now the highest point shifted from 0 to 10000.
+ 
+```{r,imputeplot}
+ggplot(tot_steps_eachday_impute, aes(tot_step)) +
+  geom_histogram(fill = "red", binwidth = 1200) +
+  labs(title = "Histogram Steps Per Day", x = "Steps per day", y = "Frequency")
+```
+
+Now mean and median value changed.
+
+
+```{r,imputemean}
+mean(tot_steps_eachday_impute$tot_step)
+median(tot_steps_eachday_impute$tot_step)
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Next we create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+
+```{r,wday}
+activity_impute$weekType <-  ifelse(as.POSIXlt(activity_impute$date)$wday %in% c(0,6), 'weekend', 'weekday')
+activity_wday <- activity_impute %>%
+  group_by(interval, weekType) %>%
+  summarise(steps = mean(steps))
+
+```
+
+We make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+
+```{r,wdayplot}
+ggplot(activity_wday, aes(interval, steps, color = weekType)) +
+  geom_line() +
+  facet_wrap(~ weekType, ncol = 1) 
+
+```
